@@ -1,0 +1,20 @@
+# Tripwire example configuration (Phase 1 surface).
+#
+# Trust labels are consumed by Tier 1 (provenance) starting in Phase 2;
+# omitted trust defaults to `untrusted` — the safe direction.
+# Verification `rules` arrive with the policy engine (Phase 2).
+
+upstreams:
+  - name: vendors # internal vendor DB — where real banking details live
+    command: ['npx', 'tsx', 'demo/vendors-mcp/index.ts']
+    trust: trusted
+  - name: docs # reads third-party documents
+    command: ['npx', 'tsx', 'demo/docs-mcp/index.ts']
+    trust: untrusted
+  - name: payments
+    command: ['npx', 'tsx', 'demo/payments-mcp/index.ts']
+    trust: trusted
+
+# Session artifacts (audit.jsonl, receipts.jsonl, hmac.key) are written to
+# <state_dir>/sessions/<session-id>/.
+state_dir: .tripwire
