@@ -1,8 +1,6 @@
-# Tripwire example configuration (Phase 1 surface).
+# Tripwire example configuration.
 #
-# Trust labels are consumed by Tier 1 (provenance) starting in Phase 2;
-# omitted trust defaults to `untrusted` — the safe direction.
-# Verification `rules` arrive with the policy engine (Phase 2).
+# Omitted trust defaults to `untrusted` — the safe direction.
 
 upstreams:
   - name: vendors # internal vendor DB — where real banking details live
@@ -14,6 +12,36 @@ upstreams:
   - name: payments
     command: ['npx', 'tsx', 'demo/payments-mcp/index.ts']
     trust: trusted
+
+defaults:
+  on_unmatched: pass # forward tools no rule matches (audit still records them)
+  audit: all
+
+rules:
+  # Money path: fail-closed. The recipient must have appeared in a
+  # trusted-tool result this session (Tier 1, structural — an address that
+  # only ever appeared inside an untrusted document is blocked with no model
+  # call). The amount must at least be receipted somewhere in the session
+  # (`any`), blocking invented amounts; its plausibility is Tier 2's job.
+  - match: { tool: 'payments__send_payment' }
+    sensitive_params:
+      recipient: { provenance: trusted }
+      amount: { provenance: any }
+    verify:
+      tiers: [receipts, provenance, consensus]
+      panel: [anthropic/claude-sonnet-latest, openai/gpt-latest, google/gemini-latest]
+      quorum: unanimous
+      checks: [intent_match, source_grounding, bounds_and_sanity]
+      on_fail: block
+      fail_mode: closed
+      timeout_ms: 8000
+
+  # Anything an upstream marks destructive gets at least the deterministic
+  # tiers.
+  - match: { annotation: { destructiveHint: true } }
+    verify:
+      tiers: [receipts, provenance]
+      on_fail: block
 
 # Session artifacts (audit.jsonl, receipts.jsonl, hmac.key) are written to
 # <state_dir>/sessions/<session-id>/.

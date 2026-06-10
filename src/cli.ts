@@ -54,6 +54,8 @@ async function runProxy(args: string[]): Promise<void> {
     upstreams: config.upstreams,
     ledger: session.ledger,
     audit: session.audit,
+    rules: config.rules,
+    defaults: config.defaults,
   });
 
   const shutdown = async (): Promise<never> => {

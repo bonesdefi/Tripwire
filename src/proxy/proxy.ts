@@ -10,17 +10,27 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { AuditLog } from '../audit/log.js';
-import type { UpstreamConfig } from '../policy/config.js';
+import type { DefaultsConfig, RuleConfig, UpstreamConfig } from '../policy/config.js';
+import { findRule } from '../policy/match.js';
+import { extractForms } from '../provenance/extract.js';
+import { ProvenanceIndex } from '../provenance/index.js';
+import { evaluateTier1 } from '../provenance/tier1.js';
 import { canonicalHash } from '../receipts/canonical.js';
 import { ReceiptLedger } from '../receipts/ledger.js';
+import { blockResult, holdBlock, provenanceBlock, unmatchedToolBlock } from './block.js';
 import { Upstream } from './upstream.js';
 
 /**
  * The Tripwire proxy core: an MCP server facing the agent, an MCP client to
  * each upstream. Tools are merged and re-exposed as
  * `<upstream>__<tool>`; descriptions, schemas and annotations pass through
- * verbatim, and call results are forwarded byte-for-byte. Every result is
- * receipted (Tier 0) and audited before it returns to the agent.
+ * verbatim, and call results are forwarded byte-for-byte.
+ *
+ * Verification pipeline on each call:
+ *  - policy match (first rule wins; unmatched calls follow defaults)
+ *  - Tier 1 provenance enforcement of sensitive parameters (structural)
+ *  - forward to the upstream
+ *  - Tier 0 receipt + provenance indexing of the result, then audit
  */
 
 export const NAMESPACE_SEPARATOR = '__';
@@ -29,6 +39,8 @@ export interface ProxyOptions {
   upstreams: UpstreamConfig[];
   ledger: ReceiptLedger;
   audit: AuditLog;
+  rules?: RuleConfig[];
+  defaults?: DefaultsConfig;
   version?: string;
 }
 
@@ -51,11 +63,16 @@ export class TripwireProxy {
   private readonly upstreams = new Map<string, Upstream>();
   private readonly ledger: ReceiptLedger;
   private readonly audit: AuditLog;
+  private readonly rules: RuleConfig[];
+  private readonly defaults: DefaultsConfig;
+  private readonly provenance = new ProvenanceIndex();
 
   constructor(options: ProxyOptions) {
     this.upstreamConfigs = options.upstreams;
     this.ledger = options.ledger;
     this.audit = options.audit;
+    this.rules = options.rules ?? [];
+    this.defaults = options.defaults ?? { on_unmatched: 'pass', audit: 'all' };
     this.server = new Server(
       { name: 'tripwire', version: options.version ?? '0.1.0' },
       { capabilities: { tools: {} } },
@@ -130,6 +147,72 @@ export class TripwireProxy {
     }
 
     const startedAt = Date.now();
+
+    // --- Policy match (first rule wins) ---------------------------------
+    const rule = findRule(this.rules, {
+      tool: name,
+      upstream: upstream.name,
+      annotations: upstream.getCachedTool(parsed.tool)?.annotations,
+    });
+    if (rule === undefined && this.defaults.on_unmatched === 'block') {
+      this.audit.append('tool_call_blocked', {
+        tool: name,
+        upstream: upstream.name,
+        code: 'unmatched_tool',
+        args_hash: canonicalHash(args),
+        latency_ms: Date.now() - startedAt,
+      });
+      return blockResult(unmatchedToolBlock(name));
+    }
+
+    // --- Tier 1: provenance enforcement (structural, no models) ---------
+    let tier1Annotations: Record<string, unknown> = {};
+    if (rule !== undefined && rule.verify.tiers.includes('provenance')) {
+      const tier1 = evaluateTier1(rule.sensitive_params, args, this.provenance);
+      if (!tier1.ok) {
+        this.audit.append('tool_call_blocked', {
+          tool: name,
+          upstream: upstream.name,
+          code: 'provenance_violation',
+          tier: 'provenance',
+          on_fail: rule.verify.on_fail,
+          args_hash: canonicalHash(args),
+          violations: tier1.violations.map((v) => ({
+            param: v.param,
+            reason: v.reason,
+            required: v.required,
+            origins: v.origins.map((o) => ({
+              upstream: o.upstream,
+              tool: o.tool,
+              trust: o.trust,
+              receipt_seq: o.receipt_seq,
+            })),
+          })),
+          latency_ms: Date.now() - startedAt,
+        });
+        return blockResult(
+          rule.verify.on_fail === 'hold'
+            ? holdBlock(name)
+            : provenanceBlock(name, tier1.violations),
+        );
+      }
+      tier1Annotations = Object.fromEntries(
+        Object.entries(tier1.annotations).map(([param, origins]) => [
+          param,
+          origins.map((o) => ({
+            upstream: o.upstream,
+            trust: o.trust,
+            receipt_seq: o.receipt_seq,
+          })),
+        ]),
+      );
+    }
+
+    // Tier 2 (consensus) arrives in Phase 3. A rule listing it today means
+    // the tier is *not configured*, which is different from a verifier
+    // failing at runtime — so the call proceeds, loudly flagged in audit.
+    const consensusSkipped =
+      rule !== undefined && rule.verify.tiers.includes('consensus') ? true : undefined;
     let result: CallToolResult;
     try {
       result = await upstream.callTool(parsed.tool, args);
@@ -148,13 +231,23 @@ export class TripwireProxy {
       );
     }
 
-    // Tier 0: receipt the real execution before the agent ever sees it.
+    // Tier 0: receipt the real execution before the agent ever sees it,
+    // then index its values for Tier 1 provenance tracing.
     const receipt = this.ledger.record({
       tool: name,
       upstream: upstream.name,
       args,
       result,
     });
+    // Failed executions are not evidence, and echoed inputs must not gain
+    // the tool's trust label (see ProvenanceIndex.indexResult).
+    if (result.isError !== true) {
+      this.provenance.indexResult(
+        { upstream: upstream.name, trust: upstream.trust, tool: name, receipt_seq: receipt.seq },
+        result,
+        extractForms(args),
+      );
+    }
     this.audit.append('tool_call', {
       tool: name,
       upstream: upstream.name,
@@ -163,6 +256,9 @@ export class TripwireProxy {
       result_hash: receipt.result_hash,
       is_error: result.isError === true,
       decision: 'pass',
+      ...(rule !== undefined ? { rule: this.rules.indexOf(rule) } : {}),
+      ...(Object.keys(tier1Annotations).length > 0 ? { tier1_provenance: tier1Annotations } : {}),
+      ...(consensusSkipped === true ? { consensus: 'skipped_not_configured' } : {}),
       latency_ms: Date.now() - startedAt,
     });
     return result;

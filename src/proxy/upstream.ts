@@ -16,6 +16,9 @@ export class Upstream {
   readonly name: string;
   readonly trust: 'trusted' | 'untrusted';
   private readonly client: Client;
+  // Cache of upstream tool definitions, refreshed on every listTools(); the
+  // policy engine matches on annotations (e.g. destructiveHint) at call time.
+  private readonly toolCache = new Map<string, Tool>();
 
   private constructor(config: UpstreamConfig, client: Client) {
     this.name = config.name;
@@ -35,12 +38,21 @@ export class Upstream {
     });
     const client = new Client({ name: 'tripwire-proxy', version: '0.1.0' });
     await client.connect(transport);
-    return new Upstream(config, client);
+    const upstream = new Upstream(config, client);
+    await upstream.listTools(); // warm the tool cache; also validates the upstream
+    return upstream;
   }
 
   async listTools(): Promise<Tool[]> {
     const result = await this.client.listTools();
+    this.toolCache.clear();
+    for (const tool of result.tools) this.toolCache.set(tool.name, tool);
     return result.tools;
+  }
+
+  /** Last-known definition of an upstream tool (bare, un-namespaced name). */
+  getCachedTool(name: string): Tool | undefined {
+    return this.toolCache.get(name);
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<CallToolResult> {

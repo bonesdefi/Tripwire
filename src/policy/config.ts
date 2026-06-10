@@ -4,12 +4,12 @@ import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
 /**
- * Tripwire configuration (Phase 1 surface).
+ * Tripwire configuration.
  *
- * Phase 1 needs upstream definitions and state location; the verification
- * `rules` section lands with the policy engine in Phase 2. Trust labels are
- * accepted (and defaulted to `untrusted` — the safe direction) so configs
- * written today keep working when Tier 1 starts consuming them.
+ * Declarative YAML, Zod-validated with actionable errors. Defaults always
+ * point in the safe direction: upstreams are `untrusted` until labeled,
+ * verification is fail-closed, and a rule that lists a tier Tripwire cannot
+ * run yet (consensus before Phase 3) blocks rather than silently passing.
  */
 
 // No underscores allowed: tools are exposed as `<upstream>__<tool>` and the
@@ -29,6 +29,46 @@ export const UpstreamSchema = z.object({
   env: z.record(z.string()).default({}),
 });
 
+export const SensitiveParamSchema = z.object({
+  provenance: z.enum(['trusted', 'any']),
+});
+
+export const RuleMatchSchema = z
+  .object({
+    tool: z.string().optional(),
+    upstream: z.string().optional(),
+    annotation: z.record(z.union([z.boolean(), z.string(), z.number()])).optional(),
+  })
+  .refine(
+    (m) => m.tool !== undefined || m.upstream !== undefined || m.annotation !== undefined,
+    'rule match must constrain at least one of: tool, upstream, annotation',
+  );
+
+export const VerifySchema = z.object({
+  tiers: z
+    .array(z.enum(['receipts', 'provenance', 'consensus']))
+    .default(['receipts', 'provenance']),
+  panel: z.array(z.string()).default([]),
+  quorum: z.enum(['majority', 'unanimous']).default('majority'),
+  checks: z
+    .array(z.enum(['intent_match', 'source_grounding', 'bounds_and_sanity']))
+    .default(['intent_match', 'source_grounding', 'bounds_and_sanity']),
+  on_fail: z.enum(['block', 'hold']).default('block'),
+  fail_mode: z.enum(['closed', 'open']).default('closed'),
+  timeout_ms: z.number().int().positive().default(8000),
+});
+
+export const RuleSchema = z.object({
+  match: RuleMatchSchema,
+  sensitive_params: z.record(SensitiveParamSchema).default({}),
+  verify: VerifySchema.default({}),
+});
+
+export const DefaultsSchema = z.object({
+  on_unmatched: z.enum(['pass', 'block']).default('pass'),
+  audit: z.enum(['all', 'decisions']).default('all'),
+});
+
 export const ConfigSchema = z.object({
   upstreams: z
     .array(UpstreamSchema)
@@ -45,10 +85,16 @@ export const ConfigSchema = z.object({
         seen.add(u.name);
       }
     }),
+  defaults: DefaultsSchema.default({}),
+  rules: z.array(RuleSchema).default([]),
   state_dir: z.string().default('.tripwire'),
 });
 
 export type UpstreamConfig = z.infer<typeof UpstreamSchema>;
+export type SensitiveParamConfig = z.infer<typeof SensitiveParamSchema>;
+export type RuleConfig = z.infer<typeof RuleSchema>;
+export type VerifyConfig = z.infer<typeof VerifySchema>;
+export type DefaultsConfig = z.infer<typeof DefaultsSchema>;
 export type TripwireConfig = z.infer<typeof ConfigSchema>;
 
 export class ConfigError extends Error {
