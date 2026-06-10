@@ -10,14 +10,34 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { AuditLog } from '../audit/log.js';
+import { buildPacket } from '../consensus/packet.js';
+import { runPanel } from '../consensus/panel.js';
+import type { ConsensusResult } from '../consensus/types.js';
+import type { VerifierClient, VerifierFactory } from '../consensus/verifier.js';
+import {
+  INTENT_TOOL,
+  INTENT_TOOL_NAME,
+  IntentArgsSchema,
+  intentAck,
+  invalidIntent,
+  type DeclaredIntentRecord,
+} from '../intent/declare.js';
 import type { DefaultsConfig, RuleConfig, UpstreamConfig } from '../policy/config.js';
 import { findRule } from '../policy/match.js';
 import { extractForms } from '../provenance/extract.js';
-import { ProvenanceIndex } from '../provenance/index.js';
+import { ProvenanceIndex, type Origin } from '../provenance/index.js';
 import { evaluateTier1 } from '../provenance/tier1.js';
 import { canonicalHash } from '../receipts/canonical.js';
 import { ReceiptLedger } from '../receipts/ledger.js';
-import { blockResult, holdBlock, provenanceBlock, unmatchedToolBlock } from './block.js';
+import {
+  blockResult,
+  consensusFailedBlock,
+  holdBlock,
+  intentRequiredBlock,
+  provenanceBlock,
+  summarizeChecks,
+  unmatchedToolBlock,
+} from './block.js';
 import { Upstream } from './upstream.js';
 
 /**
@@ -28,7 +48,9 @@ import { Upstream } from './upstream.js';
  *
  * Verification pipeline on each call:
  *  - policy match (first rule wins; unmatched calls follow defaults)
+ *  - intent requirement (block until tripwire__declare_intent is on file)
  *  - Tier 1 provenance enforcement of sensitive parameters (structural)
+ *  - Tier 2 multi-model consensus when the rule demands it
  *  - forward to the upstream
  *  - Tier 0 receipt + provenance indexing of the result, then audit
  */
@@ -41,6 +63,8 @@ export interface ProxyOptions {
   audit: AuditLog;
   rules?: RuleConfig[];
   defaults?: DefaultsConfig;
+  /** Builds Tier 2 verifier clients from `provider/model` panel entries. */
+  verifierFactory?: VerifierFactory;
   version?: string;
 }
 
@@ -65,7 +89,9 @@ export class TripwireProxy {
   private readonly audit: AuditLog;
   private readonly rules: RuleConfig[];
   private readonly defaults: DefaultsConfig;
+  private readonly verifierFactory: VerifierFactory | undefined;
   private readonly provenance = new ProvenanceIndex();
+  private declaredIntent: DeclaredIntentRecord | null = null;
 
   constructor(options: ProxyOptions) {
     this.upstreamConfigs = options.upstreams;
@@ -73,6 +99,7 @@ export class TripwireProxy {
     this.audit = options.audit;
     this.rules = options.rules ?? [];
     this.defaults = options.defaults ?? { on_unmatched: 'pass', audit: 'all' };
+    this.verifierFactory = options.verifierFactory;
     this.server = new Server(
       { name: 'tripwire', version: options.version ?? '0.1.0' },
       { capabilities: { tools: {} } },
@@ -127,7 +154,7 @@ export class TripwireProxy {
         return tools.map((tool) => ({ ...tool, name: namespaceTool(upstream.name, tool.name) }));
       }),
     );
-    const tools = perUpstream.flat();
+    const tools = [...perUpstream.flat(), INTENT_TOOL];
     this.audit.append('tools_listed', {
       count: tools.length,
       tools: tools.map((t) => t.name),
@@ -135,10 +162,60 @@ export class TripwireProxy {
     return tools;
   }
 
+  /** Handle the synthetic intent tool: validate, receipt, remember. */
+  private handleDeclareIntent(args: Record<string, unknown>): CallToolResult {
+    const parsed = IntentArgsSchema.safeParse(args);
+    if (!parsed.success) {
+      const message = parsed.error.issues.map((i) => i.message).join('; ');
+      this.audit.append('intent_rejected', { error: message });
+      return invalidIntent(message);
+    }
+    // The declaration is receipted like any other tool execution; only the
+    // goal's hash reaches the audit log (the full text lives in receipts).
+    const receipt = this.ledger.record({
+      tool: INTENT_TOOL_NAME,
+      upstream: 'tripwire',
+      args: parsed.data,
+      result: { status: 'intent_recorded' },
+    });
+    this.declaredIntent = {
+      goal: parsed.data.goal,
+      plan_summary: parsed.data.plan_summary,
+      receipt_seq: receipt.seq,
+      ts: receipt.ts,
+    };
+    this.audit.append('intent_declared', {
+      goal_hash: canonicalHash(parsed.data.goal),
+      receipt_seq: receipt.seq,
+    });
+    return intentAck(receipt.seq);
+  }
+
+  /**
+   * Panel entries become clients via the factory; an entry that cannot be
+   * constructed (unknown provider, no factory) becomes a client that always
+   * errors, which fail-closed aggregation counts as a failed verdict.
+   */
+  private buildVerifiers(panel: string[]): VerifierClient[] {
+    return panel.map((id) => {
+      try {
+        if (this.verifierFactory === undefined) {
+          throw new Error('no verifier factory configured');
+        }
+        return this.verifierFactory(id);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { id, verify: () => Promise.reject(new Error(message)) };
+      }
+    });
+  }
+
   private async forwardToolCall(
     name: string,
     args: Record<string, unknown>,
   ): Promise<CallToolResult> {
+    if (name === INTENT_TOOL_NAME) return this.handleDeclareIntent(args);
+
     const parsed = parseNamespacedTool(name);
     const upstream = parsed === undefined ? undefined : this.upstreams.get(parsed.upstream);
     if (parsed === undefined || upstream === undefined) {
@@ -165,8 +242,21 @@ export class TripwireProxy {
       return blockResult(unmatchedToolBlock(name));
     }
 
+    // --- Intent requirement ----------------------------------------------
+    if (rule !== undefined && rule.verify.require_intent && this.declaredIntent === null) {
+      this.audit.append('tool_call_blocked', {
+        tool: name,
+        upstream: upstream.name,
+        code: 'intent_required',
+        args_hash: canonicalHash(args),
+        latency_ms: Date.now() - startedAt,
+      });
+      return blockResult(intentRequiredBlock(name));
+    }
+
     // --- Tier 1: provenance enforcement (structural, no models) ---------
     let tier1Annotations: Record<string, unknown> = {};
+    let tier1Origins: Record<string, Origin[]> = {};
     if (rule !== undefined && rule.verify.tiers.includes('provenance')) {
       const tier1 = evaluateTier1(rule.sensitive_params, args, this.provenance);
       if (!tier1.ok) {
@@ -196,6 +286,7 @@ export class TripwireProxy {
             : provenanceBlock(name, tier1.violations),
         );
       }
+      tier1Origins = tier1.annotations;
       tier1Annotations = Object.fromEntries(
         Object.entries(tier1.annotations).map(([param, origins]) => [
           param,
@@ -208,11 +299,42 @@ export class TripwireProxy {
       );
     }
 
-    // Tier 2 (consensus) arrives in Phase 3. A rule listing it today means
-    // the tier is *not configured*, which is different from a verifier
-    // failing at runtime — so the call proceeds, loudly flagged in audit.
-    const consensusSkipped =
-      rule !== undefined && rule.verify.tiers.includes('consensus') ? true : undefined;
+    // --- Tier 2: multi-model consensus (high-stakes only) ----------------
+    let consensus: ConsensusResult | undefined;
+    if (rule !== undefined && rule.verify.tiers.includes('consensus')) {
+      const { packet, packetHash } = buildPacket({
+        tool: name,
+        args,
+        toolDef: upstream.getCachedTool(parsed.tool),
+        intent: this.declaredIntent,
+        provenance: tier1Origins,
+        receipts: this.ledger.list(),
+      });
+      consensus = await runPanel(this.buildVerifiers(rule.verify.panel), packet, packetHash, {
+        checks: rule.verify.checks,
+        quorum: rule.verify.quorum,
+        failMode: rule.verify.fail_mode,
+        timeoutMs: rule.verify.timeout_ms,
+      });
+      if (consensus.decision === 'fail') {
+        this.audit.append('tool_call_blocked', {
+          tool: name,
+          upstream: upstream.name,
+          code: 'consensus_failed',
+          tier: 'consensus',
+          on_fail: rule.verify.on_fail,
+          args_hash: canonicalHash(args),
+          packet_hash: consensus.packet_hash,
+          checks: summarizeChecks(consensus),
+          consensus_latency_ms: consensus.latency_ms,
+          latency_ms: Date.now() - startedAt,
+        });
+        return blockResult(
+          rule.verify.on_fail === 'hold' ? holdBlock(name) : consensusFailedBlock(name, consensus),
+        );
+      }
+    }
+
     let result: CallToolResult;
     try {
       result = await upstream.callTool(parsed.tool, args);
@@ -258,7 +380,21 @@ export class TripwireProxy {
       decision: 'pass',
       ...(rule !== undefined ? { rule: this.rules.indexOf(rule) } : {}),
       ...(Object.keys(tier1Annotations).length > 0 ? { tier1_provenance: tier1Annotations } : {}),
-      ...(consensusSkipped === true ? { consensus: 'skipped_not_configured' } : {}),
+      ...(consensus === undefined
+        ? {}
+        : {
+            consensus: {
+              decision: consensus.decision,
+              packet_hash: consensus.packet_hash,
+              latency_ms: consensus.latency_ms,
+              checks: consensus.checks.map((c) => ({
+                check: c.check,
+                prompt_version: c.prompt_version,
+                passed: c.passed,
+                disagreement: c.disagreement,
+              })),
+            },
+          }),
       latency_ms: Date.now() - startedAt,
     });
     return result;

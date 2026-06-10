@@ -1,5 +1,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
+import type { ConsensusResult } from '../consensus/types.js';
+import { INTENT_TOOL_NAME } from '../intent/declare.js';
 import type { Tier1Violation } from '../provenance/tier1.js';
 
 /**
@@ -11,7 +13,12 @@ import type { Tier1Violation } from '../provenance/tier1.js';
  * JSON, machine-actionable, and never echoes full sensitive values.
  */
 
-export type BlockCode = 'provenance_violation' | 'unmatched_tool' | 'hold_required';
+export type BlockCode =
+  | 'provenance_violation'
+  | 'unmatched_tool'
+  | 'hold_required'
+  | 'intent_required'
+  | 'consensus_failed';
 
 export interface BlockPayload {
   tripwire: 'blocked';
@@ -24,6 +31,21 @@ export interface BlockPayload {
     required_provenance: string;
     value_preview: string;
     observed_origins: { upstream: string; tool: string; trust: string; receipt_seq: number }[];
+  }[];
+  checks?: {
+    check: string;
+    prompt_version: string;
+    passed: boolean;
+    disagreement: boolean;
+    verdicts: {
+      verifier: string;
+      status: string;
+      verdict?: string;
+      confidence?: number;
+      reasons?: string[];
+      suspected_injection?: boolean;
+      error?: string;
+    }[];
   }[];
   remediation: string;
 }
@@ -74,6 +96,62 @@ export function unmatchedToolBlock(tool: string): BlockPayload {
       'policy is configured with on_unmatched: block.',
     remediation: 'Ask the operator to add a policy rule for this tool.',
   };
+}
+
+export function intentRequiredBlock(tool: string): BlockPayload {
+  return {
+    tripwire: 'blocked',
+    code: 'intent_required',
+    tool,
+    message:
+      'Tripwire blocked this call: policy requires a declared intent before ' +
+      'this tool may be used, and none is on file for this session.',
+    remediation:
+      `Call ${INTENT_TOOL_NAME} with the user's goal (exactly as the user ` +
+      'stated it) and a short plan summary, then retry this call.',
+  };
+}
+
+export function consensusFailedBlock(tool: string, result: ConsensusResult): BlockPayload {
+  const failedChecks = result.checks.filter((c) => !c.passed).map((c) => c.check);
+  return {
+    tripwire: 'blocked',
+    code: 'consensus_failed',
+    tool,
+    message:
+      `Tripwire blocked this call: independent verification failed for ` +
+      `check(s): ${failedChecks.join(', ')}. Verdicts from each verifier are ` +
+      'included below.',
+    checks: summarizeChecks(result),
+    remediation:
+      'Read the verifier reasons. Typically this means a parameter is not ' +
+      'supported by evidence from this session, or the action does not serve ' +
+      'the declared intent. Gather the missing evidence with the appropriate ' +
+      'tools (and re-declare intent if the goal changed), then retry. If the ' +
+      'verifiers are wrong, a human must approve this action.',
+  };
+}
+
+export function summarizeChecks(result: ConsensusResult): NonNullable<BlockPayload['checks']> {
+  return result.checks.map((check) => ({
+    check: check.check,
+    prompt_version: check.prompt_version,
+    passed: check.passed,
+    disagreement: check.disagreement,
+    verdicts: check.outcomes.map((o) => ({
+      verifier: o.verifier,
+      status: o.status,
+      ...(o.verdict === undefined
+        ? {}
+        : {
+            verdict: o.verdict.verdict,
+            confidence: o.verdict.confidence,
+            reasons: o.verdict.reasons,
+            suspected_injection: o.verdict.suspected_injection,
+          }),
+      ...(o.error === undefined ? {} : { error: o.error }),
+    })),
+  }));
 }
 
 export function holdBlock(tool: string): BlockPayload {

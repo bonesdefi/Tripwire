@@ -29,7 +29,11 @@ rules:
       amount: { provenance: any }
     verify:
       tiers: [receipts, provenance, consensus]
-      panel: [anthropic/claude-sonnet-latest, openai/gpt-latest, google/gemini-latest]
+      require_intent: true # agent must call tripwire__declare_intent first
+      # Independent models from different providers. Substitute the current
+      # model ids your provider accounts serve. Keys via ANTHROPIC_API_KEY,
+      # OPENAI_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY).
+      panel: [anthropic/claude-sonnet-4-6, openai/gpt-5.1, google/gemini-2.5-pro]
       quorum: unanimous
       checks: [intent_match, source_grounding, bounds_and_sanity]
       on_fail: block

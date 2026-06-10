@@ -75,6 +75,51 @@ upstreams:
     ).toThrow(ConfigError);
   });
 
+  it('reserves the "tripwire" upstream name for synthetic tools', () => {
+    expect(() =>
+      parseConfig(`
+upstreams:
+  - name: tripwire
+    command: ["x"]
+`),
+    ).toThrow(/reserved/);
+  });
+
+  it('rejects a consensus tier without a panel', () => {
+    expect(() =>
+      parseConfig(`
+upstreams:
+  - name: a
+    command: ["x"]
+rules:
+  - match: { tool: "a__t" }
+    verify: { tiers: [receipts, provenance, consensus] }
+`),
+    ).toThrow(/non-empty panel/);
+  });
+
+  it('accepts a full consensus rule and applies fail-safe defaults', () => {
+    const config = parseConfig(`
+upstreams:
+  - name: a
+    command: ["x"]
+rules:
+  - match: { tool: "a__t" }
+    sensitive_params:
+      recipient: { provenance: trusted }
+    verify:
+      tiers: [receipts, provenance, consensus]
+      require_intent: true
+      panel: [anthropic/claude-sonnet-4-6, openai/gpt-5.1]
+      quorum: unanimous
+`);
+    const verify = config.rules[0]?.verify;
+    expect(verify?.fail_mode).toBe('closed'); // safe default
+    expect(verify?.on_fail).toBe('block');
+    expect(verify?.timeout_ms).toBe(8000);
+    expect(verify?.checks).toEqual(['intent_match', 'source_grounding', 'bounds_and_sanity']);
+  });
+
   it('rejects invalid YAML with the source in the message', () => {
     expect(() => parseConfig('upstreams: [', 'my.yaml')).toThrow(/my\.yaml: invalid YAML/);
   });

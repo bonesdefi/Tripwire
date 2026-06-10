@@ -57,12 +57,50 @@ export {
 } from './provenance/tier1.js';
 export {
   blockResult,
+  consensusFailedBlock,
   holdBlock,
+  intentRequiredBlock,
   provenanceBlock,
+  summarizeChecks,
   unmatchedToolBlock,
   type BlockCode,
   type BlockPayload,
 } from './proxy/block.js';
+export {
+  VerdictSchema,
+  type CheckName,
+  type CheckOutcome,
+  type CheckPrompt,
+  type ConsensusResult,
+  type Verdict,
+  type VerificationPacket,
+  type VerifierOutcome,
+} from './consensus/types.js';
+export { buildPacket, type DeclaredIntent } from './consensus/packet.js';
+export { runPanel, type PanelOptions } from './consensus/panel.js';
+export {
+  VerdictParseError,
+  fetchWithRetry,
+  packetMessage,
+  parseVerdict,
+  type VerifierClient,
+  type VerifierFactory,
+  type VerifyInput,
+} from './consensus/verifier.js';
+export {
+  AnthropicVerifier,
+  GoogleVerifier,
+  OpenAiVerifier,
+  defaultVerifierFactory,
+} from './consensus/providers.js';
+export { CHECK_PROMPTS } from './consensus/prompts/index.js';
+export {
+  INTENT_TOOL,
+  INTENT_TOOL_NAME,
+  IntentArgsSchema,
+  type DeclaredIntentRecord,
+  type IntentArgs,
+} from './intent/declare.js';
 export {
   NAMESPACE_SEPARATOR,
   TripwireProxy,

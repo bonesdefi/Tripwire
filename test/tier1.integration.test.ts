@@ -73,8 +73,8 @@ beforeAll(async () => {
           amount: { provenance: 'any' },
         },
         verify: {
-          // consensus listed but not configured (Phase 3): proceeds, flagged.
-          tiers: ['receipts', 'provenance', 'consensus'],
+          // Tier 1 only — the whole point of this gate is zero model calls.
+          tiers: ['receipts', 'provenance'],
           on_fail: 'block',
           fail_mode: 'closed',
         },
@@ -214,8 +214,7 @@ describe('poisoned-invoice scenario (Tier 1 only, no verifiers)', () => {
     expect(blocks).toHaveLength(4);
     expect(blocks.every((b) => b.data.code === 'provenance_violation')).toBe(true);
 
-    // The successful payment carries Tier 1 provenance annotations and the
-    // consensus-not-configured flag.
+    // The successful payment carries Tier 1 provenance annotations.
     const paid = entries.find(
       (e) =>
         e.type === 'tool_call' &&
@@ -223,7 +222,6 @@ describe('poisoned-invoice scenario (Tier 1 only, no verifiers)', () => {
         e.data.decision === 'pass',
     );
     expect(paid).toBeDefined();
-    expect(paid?.data.consensus).toBe('skipped_not_configured');
     const tier1 = paid?.data.tier1_provenance as Record<
       string,
       { upstream: string; trust: string }[]

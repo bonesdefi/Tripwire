@@ -23,6 +23,10 @@ export const UpstreamSchema = z.object({
     .regex(
       upstreamNamePattern,
       'upstream name must be alphanumeric/dashes (no underscores — they delimit the tool namespace)',
+    )
+    .refine(
+      (name) => name !== 'tripwire',
+      'upstream name "tripwire" is reserved for synthetic tools',
     ),
   command: z.array(z.string()).nonempty('command must have at least the executable'),
   trust: z.enum(['trusted', 'untrusted']).default('untrusted'),
@@ -44,19 +48,36 @@ export const RuleMatchSchema = z
     'rule match must constrain at least one of: tool, upstream, annotation',
   );
 
-export const VerifySchema = z.object({
-  tiers: z
-    .array(z.enum(['receipts', 'provenance', 'consensus']))
-    .default(['receipts', 'provenance']),
-  panel: z.array(z.string()).default([]),
-  quorum: z.enum(['majority', 'unanimous']).default('majority'),
-  checks: z
-    .array(z.enum(['intent_match', 'source_grounding', 'bounds_and_sanity']))
-    .default(['intent_match', 'source_grounding', 'bounds_and_sanity']),
-  on_fail: z.enum(['block', 'hold']).default('block'),
-  fail_mode: z.enum(['closed', 'open']).default('closed'),
-  timeout_ms: z.number().int().positive().default(8000),
-});
+export const VerifySchema = z
+  .object({
+    tiers: z
+      .array(z.enum(['receipts', 'provenance', 'consensus']))
+      .default(['receipts', 'provenance']),
+    require_intent: z.boolean().default(false),
+    panel: z.array(z.string()).default([]),
+    quorum: z.enum(['majority', 'unanimous']).default('majority'),
+    checks: z
+      .array(z.enum(['intent_match', 'source_grounding', 'bounds_and_sanity']))
+      .default(['intent_match', 'source_grounding', 'bounds_and_sanity']),
+    on_fail: z.enum(['block', 'hold']).default('block'),
+    fail_mode: z.enum(['closed', 'open']).default('closed'),
+    timeout_ms: z.number().int().positive().default(8000),
+  })
+  .superRefine((verify, ctx) => {
+    if (verify.tiers.includes('consensus') && verify.panel.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'the consensus tier requires a non-empty panel (e.g. ["anthropic/claude-sonnet-latest", "openai/gpt-latest"])',
+      });
+    }
+    if (verify.tiers.includes('consensus') && verify.checks.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'the consensus tier requires at least one check',
+      });
+    }
+  });
 
 export const RuleSchema = z.object({
   match: RuleMatchSchema,

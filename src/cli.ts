@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { verifyAuditFile } from './audit/log.js';
+import { defaultVerifierFactory } from './consensus/providers.js';
 import { ConfigError, loadConfig } from './policy/config.js';
 import { TripwireProxy } from './proxy/proxy.js';
 import { verifyReceiptFile } from './receipts/ledger.js';
@@ -56,6 +57,7 @@ async function runProxy(args: string[]): Promise<void> {
     audit: session.audit,
     rules: config.rules,
     defaults: config.defaults,
+    verifierFactory: defaultVerifierFactory,
   });
 
   const shutdown = async (): Promise<never> => {

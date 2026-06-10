@@ -97,7 +97,10 @@ afterAll(async () => {
 
 describe('transparent passthrough', () => {
   it('merges upstream tools under namespaces with definitions verbatim', async () => {
-    const proxied = (await proxyClient.listTools()).tools;
+    const all = (await proxyClient.listTools()).tools;
+    // The one synthetic tool Tripwire adds; everything else is verbatim.
+    expect(all.some((t) => t.name === 'tripwire__declare_intent')).toBe(true);
+    const proxied = all.filter((t) => t.name !== 'tripwire__declare_intent');
     const expected: unknown[] = [];
     for (const name of DEMOS) {
       const direct = (await directClients[name].listTools()).tools;
