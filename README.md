@@ -14,15 +14,17 @@ Every decision — including passes — lands in a hash-chained, append-only aud
 
 The full design and build plan is in [TRIPWIRE_PLAN.md](TRIPWIRE_PLAN.md).
 
+**Read next:** [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — what each tier defends against, and exactly what Tripwire cannot do. [docs/POLICY.md](docs/POLICY.md) — the policy YAML reference.
+
 ## Status
 
-Phases 1–2 of 5 are complete: **transparent proxy + Tier 0 receipts + Tier 1 provenance.**
+v0.1.0 — all five build phases complete.
 
 - [x] **Phase 1 — Transparent proxy + receipts.** stdio MCP proxy; tools from multiple upstreams merged and re-exposed as `<upstream>__<tool>` with definitions passed through verbatim; byte-equivalent passthrough proven by integration test; HMAC-SHA256 receipt ledger over canonical JSON (in-memory + JSONL); hash-chained audit log of all traffic; `tripwire verify-log`.
 - [x] **Phase 2 — Policy engine + provenance index.** Zod-validated YAML policy (tool globs, upstream, annotation matching; first rule wins); session value-provenance index over every receipted result (addresses, amounts, emails, URLs, ids — normalized across case, whitespace, hex prefixes, number formatting); structural Tier 1 enforcement of `sensitive_params` provenance, with anti-laundering (echoed inputs never gain a tool's trust label, failed executions are not evidence); structured machine-actionable BLOCK results built for agent self-correction. The poisoned-invoice attack is blocked by Tier 1 alone — zero model calls.
 - [x] **Phase 3 — Intent capture + Tier 2 consensus.** Synthetic `tripwire__declare_intent` tool (receipted; policy can require it via `require_intent`, and the block error tells the agent how to self-serve); verification packet builder (intent + proposed call + Tier 1 provenance + receipted evidence excerpts); thin fetch-based verifier clients for Anthropic/OpenAI/Google with strict JSON verdict parsing; parallel panel with majority/unanimous quorum; timeouts, malformed output, and missing keys all count as failed verdicts under fail-closed; verifier disagreement flagged as signal; versioned prompt templates pinned in every audit entry. Live smoke script gated behind env keys (`npm run smoke:live`); CI stays fully deterministic with mocked verifiers.
 - [x] **Phase 4 — Benchmark + demo.** 42-scenario corpus (21 attacks, 21 legitimate false-positive traps); deterministic harness whose numbers reproduce in CI with zero API calls; `npm run demo` shows the disarmed agent paying the attacker, the identical agent blocked structurally and self-correcting, and Tier 2 catching a plausible-but-wrong amount.
-- [ ] Phase 5 — Threat model + launch
+- [x] **Phase 5 — Threat model + launch.** [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) (per-tier defenses, assumptions stated as attack surface, and a plain list of what Tripwire does NOT defend against), [docs/POLICY.md](docs/POLICY.md) policy reference, v0.1.0.
 
 ## The demo
 

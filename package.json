@@ -1,6 +1,6 @@
 {
   "name": "tripwire-mcp",
-  "version": "0.1.0-dev",
+  "version": "0.1.0",
   "description": "The semantic verification layer for AI agents. Deterministic where possible, consensus where necessary, auditable always.",
   "license": "MIT",
   "type": "module",
