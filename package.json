@@ -1,9 +1,33 @@
 {
   "name": "tripwire-mcp",
   "version": "0.2.0",
-  "description": "The semantic verification layer for AI agents. Deterministic where possible, consensus where necessary, auditable always.",
+  "description": "Security gateway for MCP agents: blocks prompt-injection-driven tool calls (poisoned payments, fabricated results) with cryptographic receipts, value-provenance enforcement, and multi-model consensus. The verification layer no syntactic MCP firewall has.",
   "license": "MIT",
   "type": "module",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "mcp-proxy",
+    "mcp-gateway",
+    "mcp-security",
+    "ai-agents",
+    "agent-security",
+    "prompt-injection",
+    "llm-security",
+    "guardrails",
+    "tool-use",
+    "ai-safety"
+  ],
+  "author": "bonesdefi",
+  "homepage": "https://github.com/bonesdefi/Tripwire#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bonesdefi/Tripwire.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bonesdefi/Tripwire/issues"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -13,16 +37,25 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "tripwire.example.yaml",
+    "docs/GETTING_STARTED.md",
+    "docs/POLICY.md",
+    "docs/THREAT_MODEL.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "prepare": "tsup",
+    "prepublishOnly": "npm run typecheck && npm run lint && npm run build && npm test",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "demo": "tsx demo/run-demo.ts",
     "bench": "tsx bench/run.ts",
+    "demo:svg": "tsx scripts/make-demo-svg.ts",
     "smoke:live": "tsx scripts/live-smoke.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
