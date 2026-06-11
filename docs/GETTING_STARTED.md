@@ -28,11 +28,13 @@ a trustworthy source. It keeps a tamper-proof record of everything.
 In a terminal:
 
 ```sh
-npm install -g github:bonesdefi/tripwire
+npm install -g tripwire-mcp
 ```
 
-That gives you a `tripwire` command. (Prefer not to install globally? Clone the
-repo, run `npm install`, and use `npx tripwire` in that folder instead.)
+(Before the npm release goes live, use `npm install -g github:bonesdefi/tripwire`
+instead — same result.) Either way you get a `tripwire` command. Prefer not to
+install globally? Clone the repo, run `npm install`, and use `npx tripwire` in
+that folder.
 
 ## Step 2 — Run the guided setup
 

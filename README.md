@@ -1,8 +1,14 @@
 # Tripwire
 
-**The semantic verification layer for AI agents. Deterministic where possible, consensus where necessary, auditable always.**
+**The security gateway for MCP agents that other gateways can't be: it blocks prompt-injection-driven tool calls by checking whether an action is grounded in evidence and intent — not just whether it matches a regex.**
 
-AI agents now take real actions — payments, trades, writes, sends — and the parameters of those actions are taken on faith. Existing MCP security gateways are syntactic (globs, allowlists, regex); none can answer the question that matters: _is this action grounded in the evidence and consistent with the user's intent?_
+![Tripwire stops the poisoned-invoice attack: the same agent pays an attacker when undefended, and is blocked then self-corrects when Tripwire is on](docs/demo.svg)
+
+```sh
+npm install -g tripwire-mcp   # then: tripwire init
+```
+
+AI agents now take real actions — payments, trades, writes, sends — and the parameters of those actions are taken on faith. Existing MCP security gateways are syntactic (globs, allowlists, regex); none can answer the question that matters: _is this action grounded in the evidence and consistent with the user's intent?_ A payment to an attacker's address looks identical to a payment to the real vendor.
 
 Tripwire is an MIT-licensed **MCP proxy**. Point any MCP agent at Tripwire instead of its tool servers; Tripwire forwards everything transparently while running a three-tier verification pipeline on calls that policy marks as consequential:
 
@@ -96,7 +102,7 @@ A well-built agent reads this, re-queries the vendor record (trusted), and retri
 New to this? Follow **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** — written for non-engineers.
 
 ```sh
-npm install -g github:bonesdefi/tripwire   # or: npm install in a clone
+npm install -g tripwire-mcp     # or, before the npm release: github:bonesdefi/tripwire
 
 tripwire init     # answers a few plain-language questions, writes your config
 tripwire check    # confirms your servers start and your rules make sense

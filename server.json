@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.bonesdefi/tripwire",
+  "title": "Tripwire",
+  "description": "Security gateway for MCP agents: blocks prompt-injection-driven tool calls (poisoned payments, fabricated results) with cryptographic receipts, value-provenance enforcement, and multi-model consensus.",
+  "version": "0.2.0",
+  "websiteUrl": "https://github.com/bonesdefi/Tripwire#readme",
+  "repository": {
+    "url": "https://github.com/bonesdefi/Tripwire",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "tripwire-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        { "type": "positional", "value": "run" },
+        { "type": "named", "name": "--config", "value": "tripwire.yaml" }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.github.bonesdefi/tripwire": {
+      "note": "Tripwire is a proxy that sits in front of your real MCP servers, not a turnkey server. Run `tripwire init` once to generate tripwire.yaml (the --config above) before launching."
+    }
+  }
+}
