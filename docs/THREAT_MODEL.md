@@ -154,6 +154,28 @@ trust:
   impossible and shrinks the rest of the blast radius. It does not make the
   agent immune to being steered.
 
+## HTTP transport exposure
+
+stdio mode has no network surface. HTTP mode (`transport.type: http`) adds
+one, with these properties:
+
+- **Per-session isolation is preserved.** Each connected agent gets its own
+  ledger, provenance index, audit chain, intent, and upstream processes —
+  cross-agent provenance bleed (agent A's trusted lookup vouching for agent
+  B's call) is structurally impossible and covered by tests.
+- **Fail-closed exposure rule:** binding to a non-loopback host without a
+  bearer token is a startup error. Loopback-without-auth is permitted for
+  same-machine use.
+- Bearer tokens are compared in constant time; DNS-rebinding protection
+  (Host/Origin allowlists) is always on; request bodies are size-capped; idle
+  sessions are reaped so per-session upstream processes can't accumulate.
+- **What HTTP mode does NOT provide:** TLS (terminate it at a reverse proxy —
+  the bearer token travels in headers and is plaintext without it), per-agent
+  identity or multi-tenant authorization (one shared token = one trust zone;
+  don't put mutually distrusting tenants behind the same token), and rate
+  limiting (an attacker with the token can open sessions until process/file
+  limits bite — front it with your ingress controls).
+
 ## Engineering posture
 
 - Fail-closed on money paths is mandatory in policy validation, not a

@@ -90,6 +90,27 @@ export const DefaultsSchema = z.object({
   audit: z.enum(['all', 'decisions']).default('all'),
 });
 
+export const HttpTransportSchema = z.object({
+  host: z.string().default('127.0.0.1'),
+  port: z.number().int().min(0).max(65535).default(8765), // 0 = ephemeral
+  path: z.string().startsWith('/', 'path must start with "/"').default('/mcp'),
+  /** Bearer token required on every request. Env TRIPWIRE_HTTP_TOKEN overrides. */
+  auth_token: z.string().min(16, 'auth_token must be at least 16 characters').optional(),
+  /** Host:port values accepted in the Host header (DNS-rebinding protection). */
+  allowed_hosts: z.array(z.string()).optional(),
+  /** Origins accepted in the Origin header (browser DNS-rebinding protection). */
+  allowed_origins: z.array(z.string()).optional(),
+  /** Reap a session whose last request was this many ms ago (0 = never). */
+  idle_timeout_ms: z.number().int().min(0).default(600_000),
+});
+
+export const TransportSchema = z
+  .object({
+    type: z.enum(['stdio', 'http']).default('stdio'),
+    http: HttpTransportSchema.default({}),
+  })
+  .default({});
+
 export const ConfigSchema = z.object({
   upstreams: z
     .array(UpstreamSchema)
@@ -107,6 +128,7 @@ export const ConfigSchema = z.object({
       }
     }),
   defaults: DefaultsSchema.default({}),
+  transport: TransportSchema,
   rules: z.array(RuleSchema).default([]),
   state_dir: z.string().default('.tripwire'),
 });
@@ -116,7 +138,36 @@ export type SensitiveParamConfig = z.infer<typeof SensitiveParamSchema>;
 export type RuleConfig = z.infer<typeof RuleSchema>;
 export type VerifyConfig = z.infer<typeof VerifySchema>;
 export type DefaultsConfig = z.infer<typeof DefaultsSchema>;
+export type TransportConfig = z.infer<typeof TransportSchema>;
+export type HttpTransportConfig = z.infer<typeof HttpTransportSchema>;
 export type TripwireConfig = z.infer<typeof ConfigSchema>;
+
+/** True for loopback hosts that are safe to serve without auth. */
+export function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.startsWith('127.');
+}
+
+/**
+ * Resolve the effective bearer token (env wins over file) and enforce the
+ * fail-closed exposure rule: a non-loopback bind MUST have a token, so a
+ * security proxy can never be put on a network unauthenticated by accident.
+ */
+export function resolveHttpAuth(
+  http: HttpTransportConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): { token: string | undefined } {
+  const envToken = env['TRIPWIRE_HTTP_TOKEN'];
+  const token = envToken !== undefined && envToken !== '' ? envToken : http.auth_token;
+  if (!isLoopbackHost(http.host) && (token === undefined || token === '')) {
+    throw new ConfigError(
+      `refusing to serve HTTP on non-loopback host "${http.host}" without an auth token. ` +
+        'Set transport.http.auth_token (16+ chars) or the TRIPWIRE_HTTP_TOKEN environment ' +
+        'variable, or bind to 127.0.0.1 for local-only use.',
+    );
+  }
+  return { token };
+}
 
 export class ConfigError extends Error {
   constructor(message: string) {
