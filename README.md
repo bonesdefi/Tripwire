@@ -18,7 +18,7 @@ The full design and build plan is in [TRIPWIRE_PLAN.md](TRIPWIRE_PLAN.md).
 
 ## Status
 
-v0.1.0 — all five build phases complete.
+v0.2.0 — all five build phases complete, plus a no-engineering-required setup flow (`tripwire init` / `check` / `logs`). See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 - [x] **Phase 1 — Transparent proxy + receipts.** stdio MCP proxy; tools from multiple upstreams merged and re-exposed as `<upstream>__<tool>` with definitions passed through verbatim; byte-equivalent passthrough proven by integration test; HMAC-SHA256 receipt ledger over canonical JSON (in-memory + JSONL); hash-chained audit log of all traffic; `tripwire verify-log`.
 - [x] **Phase 2 — Policy engine + provenance index.** Zod-validated YAML policy (tool globs, upstream, annotation matching; first rule wins); session value-provenance index over every receipted result (addresses, amounts, emails, URLs, ids — normalized across case, whitespace, hex prefixes, number formatting); structural Tier 1 enforcement of `sensitive_params` provenance, with anti-laundering (echoed inputs never gain a tool's trust label, failed executions are not evidence); structured machine-actionable BLOCK results built for agent self-correction. The poisoned-invoice attack is blocked by Tier 1 alone — zero model calls.
@@ -91,21 +91,39 @@ The agent reads a poisoned invoice ("our banking details changed: `0xBBBB…`") 
 
 A well-built agent reads this, re-queries the vendor record (trusted), and retries with the real address — which passes. That loop is tested end-to-end with zero verifier models in `test/tier1.integration.test.ts`.
 
-## Try it
+## Set it up (no config files to hand-write)
+
+New to this? Follow **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)** — written for non-engineers.
 
 ```sh
-npm install
-npx tsx src/cli.ts run --config tripwire.example.yaml
+npm install -g github:bonesdefi/tripwire   # or: npm install in a clone
+
+tripwire init     # answers a few plain-language questions, writes your config
+tripwire check    # confirms your servers start and your rules make sense
 ```
 
-That starts Tripwire on stdio, proxying three toy upstreams (a trusted vendor DB, an untrusted document reader, a payments rail). Point any MCP client at that command — e.g. for Claude Code:
+`tripwire init` also writes `tripwire-agent-config.json` — paste it into your AI agent's MCP settings (Claude Desktop, Claude Code, etc.), replacing the tool servers it lists today. Tripwire now sits in front of them. Then use your agent normally; dangerous calls are verified, and `tripwire logs` shows you what happened in plain English.
+
+### See the attack and the defense first
+
+```sh
+npm run demo      # the poisoned-invoice story, no API keys needed
+```
+
+### Run it by hand
+
+```sh
+tripwire run --config tripwire.example.yaml
+```
+
+That proxies three toy servers (a trusted vendor DB, an untrusted document reader, a payments rail). Point any MCP client at that command:
 
 ```json
 {
   "mcpServers": {
     "tripwire": {
-      "command": "npx",
-      "args": ["tsx", "src/cli.ts", "run", "--config", "tripwire.example.yaml"]
+      "command": "tripwire",
+      "args": ["run", "--config", "tripwire.example.yaml"]
     }
   }
 }
@@ -119,10 +137,11 @@ Every session records to `.tripwire/sessions/<session-id>/`:
 | `audit.jsonl`    | hash-chained audit log — hashes and receipt refs, no raw values  |
 | `hmac.key`       | session receipt key (omitted when `TRIPWIRE_HMAC_KEY` is set)    |
 
-Verify a recorded session after the fact:
+Read a session in plain English, or verify it cryptographically:
 
 ```sh
-npx tsx src/cli.ts verify-log .tripwire/sessions/<session-id>
+tripwire logs .tripwire/sessions/<session-id>        # what happened, in plain English
+tripwire verify-log .tripwire/sessions/<session-id>  # prove the record wasn't altered
 # audit chain    OK   (14 entries)
 # receipts       OK   (7 receipts)
 ```
