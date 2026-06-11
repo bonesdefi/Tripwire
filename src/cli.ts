@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 import { verifyAuditFile } from './audit/log.js';
+import { runCheck } from './cli/check.js';
+import { runInitWizard } from './cli/init.js';
+import { runLogs } from './cli/logs.js';
 import { defaultVerifierFactory } from './consensus/providers.js';
 import { ConfigError, loadConfig } from './policy/config.js';
 import { TripwireProxy } from './proxy/proxy.js';
@@ -19,14 +22,24 @@ import { createSession, loadSessionKey } from './session.js';
  * message goes to stderr.
  */
 
-const USAGE = `tripwire — semantic verification layer for MCP agents
+const VERSION = '0.2.0';
 
-Usage:
-  tripwire run --config <tripwire.yaml>   Start the proxy (stdio transport).
-  tripwire verify-log <session-dir>       Verify a session's audit chain and receipts.
+const USAGE = `tripwire ${VERSION} — the verification layer for AI agents
 
-Receipt verification needs the session HMAC key: either the hmac.key file in
-the session directory (written automatically) or TRIPWIRE_HMAC_KEY in the env.
+Getting started (no config knowledge needed):
+  tripwire init                           Guided setup — answer a few plain-
+                                          language questions, get a working config.
+  tripwire check [--config <file>]        Health check: servers start, rules make
+                                          sense, AI keys present. Plain English.
+
+Everyday use:
+  tripwire run --config <file>            Start the proxy (your agent launches this).
+  tripwire logs <session-dir>             What happened, in plain English.
+  tripwire verify-log <session-dir>       Cryptographically verify the record.
+
+Session folders live under .tripwire/sessions/. Receipt verification needs the
+session key: the hmac.key file written there, or TRIPWIRE_HMAC_KEY in the env.
+Docs: docs/GETTING_STARTED.md · docs/POLICY.md · docs/THREAT_MODEL.md
 `;
 
 function fail(message: string): never {
@@ -121,14 +134,35 @@ function verifyLog(args: string[]): void {
   process.exit(failed ? 1 : 0);
 }
 
+function configFlag(args: string[], fallback = 'tripwire.yaml'): string {
+  const index = args.findIndex((a) => a === '--config' || a === '-c');
+  return index === -1 ? fallback : (args[index + 1] ?? fallback);
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
+    case 'init':
+      await runInitWizard(rest[0]?.startsWith('-') === false ? rest[0] : 'tripwire.yaml');
+      break;
+    case 'check':
+      process.exit((await runCheck(configFlag(rest))) ? 0 : 1);
+      break;
     case 'run':
       await runProxy(rest);
       break;
+    case 'logs': {
+      const dir = rest[0];
+      if (dir === undefined) fail(`logs requires a session directory\n\n${USAGE}`);
+      process.exit(runLogs(dir) ? 0 : 1);
+      break;
+    }
     case 'verify-log':
       verifyLog(rest);
+      break;
+    case '--version':
+    case '-v':
+      process.stdout.write(`${VERSION}\n`);
       break;
     case undefined:
     case '--help':
