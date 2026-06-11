@@ -33,7 +33,11 @@ Bump `version` in both `package.json` and `server.json` together for each releas
 ## 2. List in the official MCP Registry
 
 `server.json` (repo root) is a valid manifest against the
-`2025-12-11` registry schema. To publish it you authenticate ownership of the
+`2025-12-11` registry schema. **Ownership validation:** the registry checks
+that the npm package's `package.json` contains
+`"mcpName": "io.github.bonesdefi/tripwire"` matching `server.json`'s `name` —
+so the npm version referenced in `server.json` must have been published with
+that field (present since 0.3.1). To publish, authenticate ownership of the
 `io.github.bonesdefi/*` namespace with your GitHub account via the official
 `mcp-publisher` CLI:
 
