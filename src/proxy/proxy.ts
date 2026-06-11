@@ -24,8 +24,7 @@ import {
 } from '../intent/declare.js';
 import type { DefaultsConfig, RuleConfig, UpstreamConfig } from '../policy/config.js';
 import { findRule } from '../policy/match.js';
-import { extractForms } from '../provenance/extract.js';
-import { ProvenanceIndex, type Origin } from '../provenance/index.js';
+import { ProvenanceIndex, indexExecution, type Origin } from '../provenance/index.js';
 import { evaluateTier1 } from '../provenance/tier1.js';
 import { canonicalHash } from '../receipts/canonical.js';
 import { ReceiptLedger } from '../receipts/ledger.js';
@@ -362,14 +361,13 @@ export class TripwireProxy {
       result,
     });
     // Failed executions are not evidence, and echoed inputs must not gain
-    // the tool's trust label (see ProvenanceIndex.indexResult).
-    if (result.isError !== true) {
-      this.provenance.indexResult(
-        { upstream: upstream.name, trust: upstream.trust, tool: name, receipt_seq: receipt.seq },
-        result,
-        extractForms(args),
-      );
-    }
+    // the tool's trust label (see indexExecution).
+    indexExecution(
+      this.provenance,
+      { upstream: upstream.name, trust: upstream.trust, tool: name, receipt_seq: receipt.seq },
+      args,
+      result,
+    );
     this.audit.append('tool_call', {
       tool: name,
       upstream: upstream.name,

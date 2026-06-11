@@ -20,6 +20,8 @@
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "demo": "tsx demo/run-demo.ts",
+    "bench": "tsx bench/run.ts",
     "smoke:live": "tsx scripts/live-smoke.ts",
     "lint": "eslint .",
     "format": "prettier --write .",

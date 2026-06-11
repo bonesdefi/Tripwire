@@ -93,6 +93,7 @@ export {
   OpenAiVerifier,
   defaultVerifierFactory,
 } from './consensus/providers.js';
+export { OfflineVerifier, offlineVerifierFactory } from './consensus/offline.js';
 export { CHECK_PROMPTS } from './consensus/prompts/index.js';
 export {
   INTENT_TOOL,

@@ -68,3 +68,25 @@ export class ProvenanceIndex {
     return this.byForm.size;
   }
 }
+
+/**
+ * Index one tool execution with Tripwire's standard safety rules:
+ * failed executions are not evidence, and echoed inputs never gain the
+ * tool's trust label. Used by the proxy and the benchmark harness so the
+ * two cannot drift.
+ */
+export function indexExecution(
+  index: ProvenanceIndex,
+  origin: Origin,
+  args: unknown,
+  result: unknown,
+): void {
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    (result as { isError?: unknown }).isError === true
+  ) {
+    return;
+  }
+  index.indexResult(origin, result, extractForms(args));
+}
