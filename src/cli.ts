@@ -23,7 +23,10 @@ import { createSession, loadSessionKey } from './session.js';
  * message goes to stderr.
  */
 
-const VERSION = '0.2.0';
+// Inlined from package.json at build time — single source of truth.
+import packageJson from '../package.json' with { type: 'json' };
+
+const VERSION: string = packageJson.version;
 
 const USAGE = `tripwire ${VERSION} — the verification layer for AI agents
 

@@ -116,6 +116,14 @@ or disputes):
 tripwire verify-log .tripwire/sessions/<the newest folder>
 ```
 
+## Running agents on a server instead of your computer?
+
+Everything above assumes the agent runs on your own machine (Claude Desktop,
+Claude Code). If your team runs agents on a server, Tripwire can run there too
+as one shared service — each agent gets its own fully separate verification
+session. That setup involves a network and an access token, so it's documented
+for your engineer in [POLICY.md → transport](POLICY.md#transport).
+
 ## What's protected, and what isn't (the honest version)
 
 - The **deterministic protections** (receipts + provenance) are always on and

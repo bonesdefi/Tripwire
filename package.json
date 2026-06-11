@@ -1,6 +1,6 @@
 {
   "name": "tripwire-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Security gateway for MCP agents: blocks prompt-injection-driven tool calls (poisoned payments, fabricated results) with cryptographic receipts, value-provenance enforcement, and multi-model consensus. The verification layer no syntactic MCP firewall has.",
   "license": "MIT",
   "type": "module",
