@@ -3,7 +3,7 @@
   "name": "io.github.bonesdefi/tripwire",
   "title": "Tripwire",
   "description": "Security gateway for MCP agents: blocks prompt-injection-driven tool calls (poisoned payments, fabricated results) with cryptographic receipts, value-provenance enforcement, and multi-model consensus.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "websiteUrl": "https://github.com/bonesdefi/Tripwire#readme",
   "repository": {
     "url": "https://github.com/bonesdefi/Tripwire",
@@ -14,7 +14,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "tripwire-mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },

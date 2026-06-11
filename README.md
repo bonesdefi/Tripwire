@@ -24,7 +24,7 @@ The full design and build plan is in [TRIPWIRE_PLAN.md](TRIPWIRE_PLAN.md).
 
 ## Status
 
-v0.2.0 — all five build phases complete, plus a no-engineering-required setup flow (`tripwire init` / `check` / `logs`). See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+v0.3.0 — all five build phases complete, plus a no-engineering-required setup flow (`tripwire init` / `check` / `logs`) and **HTTP transport** for server-side deployments (one Tripwire process, many isolated agent sessions). See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) and [Server-side (HTTP)](#server-side-http).
 
 - [x] **Phase 1 — Transparent proxy + receipts.** stdio MCP proxy; tools from multiple upstreams merged and re-exposed as `<upstream>__<tool>` with definitions passed through verbatim; byte-equivalent passthrough proven by integration test; HMAC-SHA256 receipt ledger over canonical JSON (in-memory + JSONL); hash-chained audit log of all traffic; `tripwire verify-log`.
 - [x] **Phase 2 — Policy engine + provenance index.** Zod-validated YAML policy (tool globs, upstream, annotation matching; first rule wins); session value-provenance index over every receipted result (addresses, amounts, emails, URLs, ids — normalized across case, whitespace, hex prefixes, number formatting); structural Tier 1 enforcement of `sensitive_params` provenance, with anti-laundering (echoed inputs never gain a tool's trust label, failed executions are not evidence); structured machine-actionable BLOCK results built for agent self-correction. The poisoned-invoice attack is blocked by Tier 1 alone — zero model calls.
