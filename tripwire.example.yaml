@@ -1,0 +1,52 @@
+# Tripwire example configuration.
+#
+# Omitted trust defaults to `untrusted` — the safe direction.
+
+upstreams:
+  - name: vendors # internal vendor DB — where real banking details live
+    command: ['npx', 'tsx', 'demo/vendors-mcp/index.ts']
+    trust: trusted
+  - name: docs # reads third-party documents
+    command: ['npx', 'tsx', 'demo/docs-mcp/index.ts']
+    trust: untrusted
+  - name: payments
+    command: ['npx', 'tsx', 'demo/payments-mcp/index.ts']
+    trust: trusted
+
+defaults:
+  on_unmatched: pass # forward tools no rule matches (audit still records them)
+  audit: all
+
+rules:
+  # Money path: fail-closed. The recipient must have appeared in a
+  # trusted-tool result this session (Tier 1, structural — an address that
+  # only ever appeared inside an untrusted document is blocked with no model
+  # call). The amount must at least be receipted somewhere in the session
+  # (`any`), blocking invented amounts; its plausibility is Tier 2's job.
+  - match: { tool: 'payments__send_payment' }
+    sensitive_params:
+      recipient: { provenance: trusted }
+      amount: { provenance: any }
+    verify:
+      tiers: [receipts, provenance, consensus]
+      require_intent: true # agent must call tripwire__declare_intent first
+      # Independent models from different providers. Substitute the current
+      # model ids your provider accounts serve. Keys via ANTHROPIC_API_KEY,
+      # OPENAI_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY).
+      panel: [anthropic/claude-sonnet-4-6, openai/gpt-5.1, google/gemini-2.5-pro]
+      quorum: unanimous
+      checks: [intent_match, source_grounding, bounds_and_sanity]
+      on_fail: block
+      fail_mode: closed
+      timeout_ms: 8000
+
+  # Anything an upstream marks destructive gets at least the deterministic
+  # tiers.
+  - match: { annotation: { destructiveHint: true } }
+    verify:
+      tiers: [receipts, provenance]
+      on_fail: block
+
+# Session artifacts (audit.jsonl, receipts.jsonl, hmac.key) are written to
+# <state_dir>/sessions/<session-id>/.
+state_dir: .tripwire
