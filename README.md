@@ -116,6 +116,18 @@ tripwire check    # confirms your servers start and your rules make sense
 npm run demo      # the poisoned-invoice story, no API keys needed
 ```
 
+### Server-side (HTTP)
+
+Running agents server-side rather than on a laptop? Switch the transport and one Tripwire process serves many agents — each in a fully isolated verification session (own receipts, provenance, audit, upstream connections):
+
+```yaml
+transport:
+  type: http
+  http: { host: 127.0.0.1, port: 8765, auth_token: a-long-random-secret }
+```
+
+Agents connect to `http://…:8765/mcp` with `Authorization: Bearer …`. Binding beyond loopback **requires** the token — Tripwire refuses to start exposed-but-unauthenticated. Details and the threat model for network exposure: [docs/POLICY.md](docs/POLICY.md#transport), [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md#http-transport-exposure).
+
 ### Run it by hand
 
 ```sh

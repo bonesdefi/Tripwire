@@ -21,9 +21,21 @@ export {
   type AuditVerification,
 } from './audit/log.js';
 export {
+  serveHttp,
+  type HttpServerHandle,
+  type ServeHttpOptions,
+  type SessionProxy,
+} from './proxy/http-server.js';
+export {
   ConfigError,
   ConfigSchema,
   DefaultsSchema,
+  HttpTransportSchema,
+  TransportSchema,
+  isLoopbackHost,
+  resolveHttpAuth,
+  type HttpTransportConfig,
+  type TransportConfig,
   RuleMatchSchema,
   RuleSchema,
   SensitiveParamSchema,

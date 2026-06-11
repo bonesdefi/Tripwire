@@ -9,7 +9,8 @@ import { runCheck } from './cli/check.js';
 import { runInitWizard } from './cli/init.js';
 import { runLogs } from './cli/logs.js';
 import { defaultVerifierFactory } from './consensus/providers.js';
-import { ConfigError, loadConfig } from './policy/config.js';
+import { ConfigError, loadConfig, resolveHttpAuth } from './policy/config.js';
+import { serveHttp } from './proxy/http-server.js';
 import { TripwireProxy } from './proxy/proxy.js';
 import { verifyReceiptFile } from './receipts/ledger.js';
 import { createSession, loadSessionKey } from './session.js';
@@ -60,6 +61,45 @@ async function runProxy(args: string[]): Promise<void> {
   if (configPath === undefined) fail(`run requires --config <path>\n\n${USAGE}`);
 
   const config = loadConfig(configPath);
+
+  // ── HTTP mode: one long-lived process, one isolated session per agent ──
+  if (config.transport.type === 'http') {
+    const { token } = resolveHttpAuth(config.transport.http);
+    const handle = await serveHttp({
+      http: config.transport.http,
+      token,
+      log: (message) => process.stderr.write(`tripwire: ${message}\n`),
+      createSessionProxy: () => {
+        const session = createSession(config.state_dir);
+        process.stderr.write(`tripwire: recording to ${session.dir}\n`);
+        return {
+          label: session.id,
+          proxy: new TripwireProxy({
+            upstreams: config.upstreams,
+            ledger: session.ledger,
+            audit: session.audit,
+            rules: config.rules,
+            defaults: config.defaults,
+            verifierFactory: defaultVerifierFactory,
+          }),
+        };
+      },
+    });
+    const httpShutdown = async (): Promise<never> => {
+      await handle.close().catch(() => undefined);
+      process.exit(0);
+    };
+    process.on('SIGINT', () => void httpShutdown());
+    process.on('SIGTERM', () => void httpShutdown());
+    process.stderr.write(
+      `tripwire: serving MCP over HTTP at ${handle.url}\n` +
+        `tripwire: auth ${token !== undefined ? 'bearer token required' : 'none (loopback only)'}\n` +
+        `tripwire: upstreams per session: ${config.upstreams.map((u) => u.name).join(', ')}\n`,
+    );
+    return;
+  }
+
+  // ── stdio mode (default): one process per agent ────────────────────────
   const session = createSession(config.state_dir);
   process.stderr.write(`tripwire: session ${session.id}\n`);
   process.stderr.write(`tripwire: recording to ${session.dir}\n`);

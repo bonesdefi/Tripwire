@@ -47,6 +47,19 @@ rules:
       tiers: [receipts, provenance]
       on_fail: block
 
+# How agents connect. Default is stdio (the agent launches Tripwire itself).
+# For server-side deployments, switch to HTTP: one long-lived Tripwire process,
+# one fully isolated verification session per connected agent.
+transport:
+  type: stdio
+  # type: http
+  # http:
+  #   host: 127.0.0.1   # binding beyond loopback REQUIRES an auth token
+  #   port: 8765
+  #   path: /mcp
+  #   auth_token: change-me-to-16+-chars   # or env TRIPWIRE_HTTP_TOKEN
+  #   idle_timeout_ms: 600000              # reap sessions idle 10+ minutes
+
 # Session artifacts (audit.jsonl, receipts.jsonl, hmac.key) are written to
 # <state_dir>/sessions/<session-id>/.
 state_dir: .tripwire

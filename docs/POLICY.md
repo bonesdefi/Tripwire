@@ -100,6 +100,56 @@ untraceable types (objects, booleans) fail closed.
 | `fail_mode`      | `closed`                 | `closed`: verifier timeouts/malformed output/missing keys count as FAIL votes. `open`: errored verifiers abstain (returned fail verdicts still block). Keep money paths closed. |
 | `timeout_ms`     | `8000`                   | Per-verifier budget, enforced by the panel itself.                                                                                                                              |
 
+## `transport`
+
+How agents connect. Default is `stdio` (the agent launches Tripwire itself —
+right for Claude Desktop / Claude Code). `http` runs one long-lived Tripwire
+process that many agents connect to over MCP Streamable HTTP.
+
+```yaml
+transport:
+  type: http
+  http:
+    host: 127.0.0.1 # binding beyond loopback REQUIRES an auth token
+    port: 8765
+    path: /mcp
+    auth_token: a-long-random-secret # or env TRIPWIRE_HTTP_TOKEN (env wins)
+    idle_timeout_ms: 600000 # reap sessions idle 10+ min (0 = never)
+    # allowed_hosts: ['tripwire.internal:8765']   # Host-header allowlist
+    # allowed_origins: ['https://ops.internal']   # Origin allowlist (browsers)
+```
+
+Semantics, all chosen to fail closed:
+
+- **Per-agent isolation.** Every MCP session gets its own receipts ledger,
+  provenance index, audit chain, declared intent, and its own upstream
+  connections. One agent's trusted lookups never vouch for another agent's
+  calls. Each session records to its own `<state_dir>/sessions/<id>/` folder.
+- **Exposure rule.** Binding to anything other than loopback without an auth
+  token is a startup **error**, not a warning — a verification gateway must
+  never be reachable unauthenticated by accident.
+- **Auth.** A bearer token (`Authorization: Bearer …`) is required on every
+  request when configured; compared in constant time.
+- **DNS-rebinding protection** is always on (Host/Origin validation).
+- **TLS is out of scope by design** — run behind a reverse proxy (nginx,
+  Caddy, your ingress) for HTTPS.
+- **Upstreams remain stdio child processes** spawned per session. HTTP
+  upstreams are a planned increment.
+
+Agents connect with any MCP Streamable HTTP client:
+
+```json
+{
+  "mcpServers": {
+    "tripwire": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "headers": { "Authorization": "Bearer a-long-random-secret" }
+    }
+  }
+}
+```
+
 ## Session artifacts
 
 Each run writes to `<state_dir>/sessions/<session-id>/`:

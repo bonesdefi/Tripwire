@@ -1,5 +1,10 @@
 import { PROVIDER_KEYS } from './init.js';
-import { loadConfig, type TripwireConfig } from '../policy/config.js';
+import {
+  isLoopbackHost,
+  loadConfig,
+  resolveHttpAuth,
+  type TripwireConfig,
+} from '../policy/config.js';
 import { globToRegExp } from '../policy/match.js';
 import { Upstream } from '../proxy/upstream.js';
 import { namespaceTool } from '../proxy/proxy.js';
@@ -39,7 +44,34 @@ export async function runCheck(configPath: string): Promise<boolean> {
     return false;
   }
 
-  // 2. Each tool server actually starts and lists tools.
+  // 2. Transport exposure (HTTP mode only).
+  if (config.transport.type === 'http') {
+    const http = config.transport.http;
+    try {
+      const { token } = resolveHttpAuth(http);
+      if (token !== undefined) {
+        add('ok', `HTTP mode on ${http.host}:${http.port}${http.path} with bearer-token auth.`);
+      } else {
+        add(
+          'ok',
+          `HTTP mode on ${http.host}:${http.port}${http.path} — loopback only, no auth ` +
+            '(fine for same-machine agents; add an auth token before exposing it).',
+        );
+      }
+      if (!isLoopbackHost(http.host)) {
+        add(
+          'warn',
+          `Tripwire will be reachable from the network on ${http.host}:${http.port}. ` +
+            'Traffic is plain HTTP — put it behind a TLS reverse proxy and keep the ' +
+            'bearer token secret.',
+        );
+      }
+    } catch (err) {
+      add('fail', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // 3. Each tool server actually starts and lists tools.
   const knownTools: string[] = [];
   for (const upstreamConfig of config.upstreams) {
     try {
