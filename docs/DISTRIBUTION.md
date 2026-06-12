@@ -57,18 +57,42 @@ point at `tripwire.yaml`, which `tripwire init` generates.
 
 ## 3. Community lists (the highest-traffic discovery path)
 
-MCP users browse curated lists far more than the registry today. Open a PR
-adding Tripwire to each, using the blurb below.
+MCP users browse curated lists far more than the registry today. Each list has
+its own intake (verified June 2026):
 
-- **`punkpeye/awesome-mcp-servers`** — the largest list; add under a Security
-  category.
-- **`wong2/awesome-mcp-servers`**
-- **`modelcontextprotocol/servers`** — "community servers" section of the
-  reference repo.
+### punkpeye/awesome-mcp-servers — accepts PRs, has a Security section
+
+GitHub's web editor auto-forks and opens the PR for you:
+
+1. Open <https://github.com/punkpeye/awesome-mcp-servers/edit/main/README.md>
+   (sign in as `bonesdefi`; GitHub will say it created a fork — that's normal).
+2. Find the `Security` section (browser find: `## 🔒`), and insert this line
+   alphabetically among the entries (sorted by `owner/repo`):
+
+```markdown
+- [bonesdefi/Tripwire](https://github.com/bonesdefi/Tripwire) 📇 🏠 🍎 🪟 🐧 - Security gateway that sits in front of any MCP server and blocks prompt-injection-driven tool calls (poisoned payments, fabricated results) using cryptographic receipts, value-provenance enforcement, and multi-model consensus.
+```
+
+(Badges per the list's legend: 📇 TypeScript · 🏠 local service · 🍎 🪟 🐧 all
+platforms.)
+
+3. "Commit changes" → propose changes → **Create pull request**. Suggested PR
+   title: `Add Tripwire (security gateway: provenance + receipts + consensus)`.
+
+### wong2/awesome-mcp-servers — does NOT accept PRs
+
+The README states submissions go through the website instead:
+<https://mcpservers.org/submit>. Fill the form with the GitHub URL
+(`https://github.com/bonesdefi/Tripwire`) and the one-line description above.
+
+### Others
+
+- **`modelcontextprotocol/servers`** — community section of the reference
+  repo; check its CONTRIBUTING.md before opening a PR (intake rules change).
 - Any "awesome LLM security" / "AI agent security" lists — Tripwire fits the
   prompt-injection-defense niche specifically.
 
-### Ready-to-paste list entry
+### Ready-to-paste generic entry
 
 ```markdown
 - [Tripwire](https://github.com/bonesdefi/Tripwire) — Security gateway that
